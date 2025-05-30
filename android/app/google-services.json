@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "747826073362",
+    "project_id": "tripeogod",
+    "storage_bucket": "tripeogod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747826073362:android:f2ea77e0e8c3f2deb06dcb",
+        "android_client_info": {
+          "package_name": "com.example.trip"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2XG2GiyjaalLRfV8US1B3ANrgiWlNkC0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
