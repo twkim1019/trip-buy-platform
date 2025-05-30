@@ -30,82 +30,83 @@ class RequestListScreen extends StatelessWidget {
           if (docs.isEmpty) {
             return const Center(child: Text('등록된 요청이 없습니다.'));
           }
+
           return ListView.builder(
             itemCount: docs.length,
             itemBuilder: (ctx, i) {
               final req = docs[i];
               final data = req.data();
-              final requesterId = data['userId'] as String? ?? '';
-              final item        = data['item']    as String? ?? '';
-              final quantity    = data['quantity'] as int?    ?? 0;
-              final notes       = data['notes']    as String? ?? '';
-              final status      = data['status']   as String? ?? '';
+              final requesterId = data['userId'] as String;
+              final item        = data['item']    as String;
+              final quantity    = data['quantity'] as int;
+              final notes       = data['notes']    as String;
+              final status      = data['status']   as String;
 
-              return Dismissible(
-                key: Key(req.id),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  color: Colors.red,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                onDismissed: (_) async {
-                  await FirebaseService.deleteRequest(req.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('요청이 삭제되었습니다.')),
+              // 요청 하나당 프로필 스트림을 구독해서 닉네임을 가져옵니다.
+              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseService.streamUserProfile(requesterId),
+                builder: (ctx2, snap2) {
+                  final profile = snap2.data?.data() ?? {};
+                  final nick = profile['nickname'] as String? ?? '익명';
+
+                  return Dismissible(
+                    key: Key(req.id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Colors.red,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    onDismissed: (_) async {
+                      await FirebaseService.deleteRequest(req.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('요청이 삭제되었습니다.')),
+                      );
+                    },
+                    child: Card(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        // 요청자 이니셜 아바타
+                        leading: CircleAvatar(
+                          child: Text(
+                            nick.isNotEmpty ? nick[0] : '?',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+
+                        // “닉네임 님의 요청: 아이템 (x수량)” 형태로 표시
+                        title: Text('$nick 님의 구매 요청: $item (x$quantity)'),
+
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (notes.isNotEmpty) Text('추가 요청: $notes'),
+                            Text('상태: $status'),
+                          ],
+                        ),
+
+                        // 메시지 버튼: 채팅 화면으로 연결
+                        trailing: IconButton(
+                          icon: const Icon(Icons.message),
+                          tooltip: '메시지 보내기',
+                          onPressed: () {
+                            final chatId = FirebaseService.chatIdFor(me, requesterId);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  otherUserId: requesterId,
+                                  otherNickname: nick,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   );
                 },
-                child: Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    leading: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseService.streamUserProfile(requesterId),
-                      builder: (ctx2, snap2) {
-                        final nick = snap2.data?.data()?['nickname'] as String? ?? '?';
-                        return CircleAvatar(child: Text(nick[0]));
-                      },
-                    ),
-                    title: Text('$item (x$quantity)'),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (notes.isNotEmpty) Text('추가 요청: $notes'),
-                        Text('상태: $status'),
-                      ],
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.message),
-                      tooltip: '채팅',
-                      onPressed: () async {
-                        if (requesterId.isEmpty) return;
-                        // 1) 채팅방 ID 생성
-                        final chatId = FirebaseService.chatIdFor(me, requesterId);
-                        // 2) 채팅방 문서 생성(merge)해서 보장
-                        await FirebaseService.firestore
-                            .collection('chats')
-                            .doc(chatId)
-                            .set({'createdAt': FieldValue.serverTimestamp()},
-                                 SetOptions(merge: true));
-                        // 3) 요청자 닉네임 조회
-                        final userSnap = await FirebaseService.firestore
-                            .collection('users')
-                            .doc(requesterId)
-                            .get();
-                        final otherNick = userSnap.data()?['nickname'] as String? ?? 'Unknown';
-                        // 4) ChatScreen으로 이동
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              otherUserId: requesterId,
-                              otherNickname: otherNick,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
               );
             },
           );
