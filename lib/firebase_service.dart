@@ -35,6 +35,13 @@ class FirebaseService {
     return firestore.collection('users').doc(userId).snapshots();
   }
 
+   /// 모든 사용자의 여행 일정 스트림
+  static Stream<QuerySnapshot<Map<String, dynamic>>> allTrips() {
+    return firestore
+        .collection('trips')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
   /// 여행 일정 저장
   static Future<void> saveTrip({
     required String userId,
