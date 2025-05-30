@@ -1,23 +1,27 @@
 // lib/screens/auth_screen.dart
 import 'package:flutter/material.dart';
-import '../firebase_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+enum AuthMode { login, signup }
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({Key? key}) : super(key: key);
+
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  _AuthScreenState createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
-  String _email = '', _password = '';
+  AuthMode _mode = AuthMode.login;
+  String _email = '';
+  String _password = '';
   bool _isLoading = false;
   String? _error;
 
   Future<void> _submit() async {
-    final form = _formKey.currentState!;
-    if (!form.validate()) return;
-    form.save();
+    if (!_formKey.currentState!.validate()) return;
+    _formKey.currentState!.save();
 
     setState(() {
       _isLoading = true;
@@ -25,13 +29,21 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      await FirebaseService.auth.signInWithEmailAndPassword(
-        email: _email.trim(),
-        password: _password,
-      );
-      // Navigator 호출 없이 authStateChanges() 로 자동 분기
-    } on Exception catch (e) {
-      setState(() => _error = e.toString());
+      final auth = FirebaseAuth.instance;
+      if (_mode == AuthMode.login) {
+        await auth.signInWithEmailAndPassword(
+          email: _email,
+          password: _password,
+        );
+      } else {
+        await auth.createUserWithEmailAndPassword(
+          email: _email,
+          password: _password,
+        );
+        await auth.currentUser?.sendEmailVerification();
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -39,131 +51,126 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLogin = _mode == AuthMode.login;
     return Scaffold(
-      // 전체 배경을 흰색으로, AppBar 제거 or 가볍게
       backgroundColor: Colors.white,
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // (선택) 로고나 제목
-              const FlutterLogo(size: 72),
-              const SizedBox(height: 24),
+        child: Container(
+          width: 320,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isLogin ? 'Login' : 'Sign Up',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
+                const SizedBox(height: 16),
 
-              if (_error != null) ...[
-                Text(_error!, style: const TextStyle(color: Colors.red)),
+                // 이메일 입력
+                TextFormField(
+                  key: const ValueKey('email'),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    hintText: 'E-mail',
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  validator: (v) => v != null && v.contains('@') ? null : 'Valid email required',
+                  onSaved: (v) => _email = v!.trim(),
+                ),
                 const SizedBox(height: 12),
-              ],
 
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    // 이메일 입력란
-                    TextFormField(
-                      key: const ValueKey('email'),
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        hintText: '이메일',
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 16, horizontal: 16),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide:
-                              BorderSide(color: Theme.of(context).primaryColor),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                      ),
-                      validator: (val) {
-                        if (val == null ||
-                            val.trim().isEmpty ||
-                            !val.contains('@')) {
-                          return '유효한 이메일을 입력해주세요.';
-                        }
-                        return null;
-                      },
-                      onSaved: (val) => _email = val ?? '',
+                // 비밀번호 입력
+                TextFormField(
+                  key: const ValueKey('password'),
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    hintText: 'Password',
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
                     ),
-                    const SizedBox(height: 16),
-
-                    // 비밀번호 입력란
-                    TextFormField(
-                      key: const ValueKey('password'),
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        hintText: '비밀번호',
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 16, horizontal: 16),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.grey),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.grey),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide:
-                              BorderSide(color: Theme.of(context).primaryColor),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                      ),
-                      validator: (val) {
-                        if (val == null || val.length < 6) {
-                          return '6자 이상 비밀번호를 입력해주세요.';
-                        }
-                        return null;
-                      },
-                      onSaved: (val) => _password = val ?? '',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
                     ),
-                    const SizedBox(height: 24),
+                  ),
+                  validator: (v) => v != null && v.length >= 6 ? null : 'Min 6 characters',
+                  onSaved: (v) => _password = v!.trim(),
+                ),
+                const SizedBox(height: 24),
 
-                    // 로그인 버튼
-                    if (_isLoading)
-                      const CircularProgressIndicator()
-                    else
-                      SizedBox(
+                // 제출 버튼
+                _isLoading
+                    ? const CircularProgressIndicator()
+                    : SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _submit,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: const Text('로그인', style: TextStyle(fontSize: 16)),
+                          onPressed: _submit,
+                          child: Text(
+                            isLogin ? 'Login' : 'Sign Up',
+                            style: TextStyle(fontSize: 16),
+                          ),
                         ),
                       ),
 
-                    // (선택) 회원가입 전환 텍스트 버튼
-                    TextButton(
-                      onPressed: () {
-                        // 회원가입 화면으로 이동하거나 모드를 토글
-                      },
-                      child: const Text('계정이 없으신가요? 회원가입'),
-                    ),
-                  ],
+                TextButton(
+                  onPressed: () => setState(() {
+                    _mode = isLogin ? AuthMode.signup : AuthMode.login;
+                    _error = null;
+                  }),
+                  child: Text(
+                    isLogin ? 'Create new account' : 'Already have account?',
+                    style: TextStyle(color: Colors.blueGrey),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+
 
